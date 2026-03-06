@@ -115,17 +115,83 @@ def analyze_stock(
         else:
             result.price_vs_zs = "inside"
 
+    # --- 走势判断（需在买卖点判断前完成） ---
+    result.trend = _judge_trend(bis)
+
     # --- 信号 ---
     signals = _extract_signals(c)
     result.signals = signals
-    result.buy_point = _detect_buy_point(signals)
-    result.sell_point = _detect_sell_point(signals)
-    result.beichi = _detect_beichi(signals)
 
-    # --- 走势判断（简化：根据最后三笔方向） ---
-    result.trend = _judge_trend(bis)
+    # 优先用结构规则判断买卖点（基于中枢数据）
+    _judge_buy_sell_points(result, bis, zs_list)
+
+    # 若结构规则无命中，再尝试 czsc 信号字典兜底
+    if not result.buy_point and not result.sell_point and not result.beichi:
+        result.buy_point = _detect_buy_point(signals)
+        result.sell_point = _detect_sell_point(signals)
+        result.beichi = _detect_beichi(signals)
 
     return result
+
+
+def _judge_buy_sell_points(result: AnalysisResult, bis: list, zs_list: list) -> None:
+    """基于结构数据（笔+中枢）判断买卖点，直接修改 result"""
+    if not bis or not zs_list:
+        return
+
+    last_zs = zs_list[-1]
+    zg = last_zs.zg   # 中枢上沿
+    zd = last_zs.zd   # 中枢下沿
+    p = result.last_close
+    trend = result.trend
+    bi_dir = result.last_bi_direction   # 'up' / 'down'
+    bi_high = result.last_bi_high
+    bi_low = result.last_bi_low
+
+    # ---------------------------------------------------------------
+    # 三类买点：上涨走势 + 最后向下笔回调守住中枢上沿 + 当前价在中枢上方
+    #   回调低点 >= ZG * 0.97（允许3%误差）且当前价 > ZG
+    # ---------------------------------------------------------------
+    if (trend == "up"
+            and bi_dir == "down"
+            and bi_low >= zg * 0.97
+            and p > zg):
+        result.buy_point = "3buy"
+        return
+
+    # ---------------------------------------------------------------
+    # 二类买点：上涨走势 + 最后向下笔低点落在中枢区间内（ZD~ZG）
+    #   当前价已回升至中枢下沿之上
+    # ---------------------------------------------------------------
+    if (trend == "up"
+            and bi_dir == "down"
+            and zd <= bi_low < zg
+            and p >= zd):
+        result.buy_point = "2buy"
+        return
+
+    # ---------------------------------------------------------------
+    # 底背驰（一类买点前兆）：下跌走势 + 笔数足够 + 最后向下笔力度收缩
+    #   最后向下笔幅度 < 前一向下笔幅度 * 0.85
+    # ---------------------------------------------------------------
+    if trend == "down" and bi_dir == "down" and len(bis) >= 16:
+        down_bis = [b for b in bis if b.direction.value != 1]
+        if len(down_bis) >= 2:
+            last_range = down_bis[-1].high - down_bis[-1].low
+            prev_range = down_bis[-2].high - down_bis[-2].low
+            if prev_range > 0 and last_range / prev_range < 0.85:
+                result.beichi = True
+                result.buy_point = "1buy"
+                return
+
+    # ---------------------------------------------------------------
+    # 三类卖点：下跌走势 + 最后向上笔反弹未过中枢下沿 + 当前价在中枢下方
+    # ---------------------------------------------------------------
+    if (trend == "down"
+            and bi_dir == "up"
+            and bi_high <= zd * 1.03
+            and p < zd):
+        result.sell_point = "3sell"
 
 
 def _extract_signals(c: CZSC) -> List[str]:
