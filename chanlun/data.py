@@ -141,6 +141,7 @@ def get_stock_universe(date: Optional[str] = None) -> List[str]:
     import pandas as pd
 
     df: pd.DataFrame = rq.all_instruments(type="CS", date=date)
+    df = df.set_index("order_book_id")  # 股票代码作为索引
     codes = df.index.tolist()
 
     if config.EXCLUDE_ST:
