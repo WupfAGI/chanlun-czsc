@@ -164,36 +164,37 @@ def _judge_buy_sell_points(result: AnalysisResult, bis: list, zs_list: list) -> 
 
     # ---------------------------------------------------------------
     # 三类买点：上涨走势 + 最后向下笔回调守住中枢上沿 + 当前价在中枢上方
-    #   回调低点 >= ZG * 0.97（允许3%误差）且当前价 > ZG
+    #   回调低点 >= ZG * 0.97（允许3%误差）
+    #   当前价 > ZG 且不超过 ZG * 1.20（机会仍新鲜，未涨远）
     # ---------------------------------------------------------------
     if (trend == "up"
             and bi_dir == "down"
             and bi_low >= zg * 0.97
-            and p > zg):
+            and zg < p <= zg * 1.20):
         result.buy_point = "3buy"
         return
 
     # ---------------------------------------------------------------
     # 二类买点：上涨走势 + 最后向下笔低点落在中枢区间内（ZD~ZG）
-    #   当前价已回升至中枢下沿之上
+    #   当前价已回升至中枢下沿之上，且不超过 ZG * 1.15（机会仍新鲜）
     # ---------------------------------------------------------------
     if (trend == "up"
             and bi_dir == "down"
             and zd <= bi_low < zg
-            and p >= zd):
+            and zd <= p <= zg * 1.15):
         result.buy_point = "2buy"
         return
 
     # ---------------------------------------------------------------
-    # 底背驰（一类买点前兆）：下跌走势 + 笔数足够 + 最后向下笔力度收缩
-    #   最后向下笔幅度 < 前一向下笔幅度 * 0.85
+    # 底背驰（一类买点前兆）：下跌走势 + 笔数足够 + 最后向下笔力度明显收缩
+    #   最后向下笔幅度 < 前一向下笔幅度 * 0.75（收紧：原0.85→0.75）
     # ---------------------------------------------------------------
     if trend == "down" and bi_dir == "down" and len(bis) >= 16:
         down_bis = [b for b in bis if b.direction.value != 1]
         if len(down_bis) >= 2:
             last_range = down_bis[-1].high - down_bis[-1].low
             prev_range = down_bis[-2].high - down_bis[-2].low
-            if prev_range > 0 and last_range / prev_range < 0.85:
+            if prev_range > 0 and last_range / prev_range < 0.75:
                 result.beichi = True
                 result.buy_point = "1buy"
                 return
