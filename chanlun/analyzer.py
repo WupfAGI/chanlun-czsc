@@ -44,6 +44,9 @@ class AnalysisResult:
     # 走势类型
     trend: str = ""                    # 'up' / 'down' / 'sideways'
 
+    # 股票名称
+    name: str = ""                     # 中文名称，如 '贵州茅台'
+
     error: str = ""                    # 出错信息（空表示成功）
 
 
@@ -64,11 +67,22 @@ def analyze_stock(
     end_date : 截止日期
     """
     from .data import get_klines
+    import rqdatac as rq
+
+    # 查询股票中文名称
+    stock_name = ""
+    try:
+        inst = rq.instruments(code)
+        if inst is not None:
+            stock_name = inst.symbol
+    except Exception:
+        pass
 
     result = AnalysisResult(
         code=code,
         freq=freq,
         as_of=datetime.datetime.now(),
+        name=stock_name,
     )
 
     try:
@@ -267,8 +281,9 @@ def format_report(result: AnalysisResult) -> str:
     if result.error:
         return f"## {result.code} 分析失败\n\n**错误**: {result.error}\n"
 
+    name_part = f"（{result.name}）" if result.name else ""
     lines = [
-        f"## {result.code} 缠论分析报告",
+        f"## {result.code}{name_part} 缠论分析报告",
         f"**周期**: {result.freq}  |  **截止**: {result.as_of.strftime('%Y-%m-%d %H:%M')}  |  **收盘**: {result.last_close:.2f}",
         "",
         "### 走势结构",
